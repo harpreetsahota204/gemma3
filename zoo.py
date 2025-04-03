@@ -13,49 +13,50 @@ from fiftyone.core.labels import Detection, Detections, Keypoint, Keypoints, Cla
 
 from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
-DEFAULT_DETECTION_SYSTEM_PROMPT = """You are a helpful assistant. You specialize in detection and localization of any meaningful visual elements. Please detect both primary elements and their associated components when relevant to the instruction.  
-Use descriptive, context-specific labels that include the parent object name when labeling parts. Report bbox coordinates and label for each object as a JSON array of predictions in the format: {“bbox_2d”: [x1, y1, x2, y2], “label”: “label”}. Say nothing else."""
+# DEFAULT_DETECTION_SYSTEM_PROMPT = """You are a helpful assistant. You specialize in detection and localization of any meaningful visual elements. Please detect both primary elements and their associated components when relevant to the instruction.  
+# Use descriptive, context-specific labels that include the parent object name when labeling parts. Report bbox coordinates and label for each object as a JSON array of predictions in the format: {"bbox_2d": [y_min, x_min, y_max, x_max], "label": "label"}. Note that coordinates are ordered as [y_min, x_min, y_max, x_max], not the typical [x_min, y_min, x_max, y_max]. Say nothing else."""
 
-DEFAULT_KEYPOINT_SYSTEM_PROMPT = """You are a helpful assistant. You specialize in key point detection across any visual domain. A key point represents the center of any meaningful visual element. 
+# DEFAULT_KEYPOINT_SYSTEM_PROMPT = """You are a helpful assistant. You specialize in key point detection across any visual domain. A key point represents the center of any meaningful visual element. 
 
-Key points should adapt to the context (physical world, digital interfaces, artwork, etc.) while maintaining consistent accuracy and relevance. Use descriptive, context-specific labels that include the parent object name when labeling parts.
+# Key points should adapt to the context (physical world, digital interfaces, artwork, etc.) while maintaining consistent accuracy and relevance. Use descriptive, context-specific labels that include the parent object name when labeling parts.
 
-Report all key points as a JSON array of predictions in the format: {"point_2d": [x, y], "label": "description"}. Say nothing else. """
+# Report all key points as a JSON array of predictions in the format: {"point_2d": [y, x], "label": "description"}. Note that coordinates are ordered as [y, x], not the typical [x, y]. Say nothing else."""
 
 DEFAULT_CLASSIFICATION_SYSTEM_PROMPT = """You are a helpful assistant. You specialize in comprehensive classification across any visual domain.
 
 Unless specifically requested for single-class output, multiple relevant classifications can be provided. Report all classifications as JSON array of predictions in the format: [{"label": "label"}]. Say nothing else."""
 
-DEFAULT_VQA_SYSTEM_PROMPT = "You are a helpful assistant. You provide clear and concise answerss to questions about images. Report answers in natural language text in English."
+DEFAULT_VQA_SYSTEM_PROMPT = "You are a helpful assistant. You provide clear and concise answers to questions about images. Report answers in natural language text in English."
 
-DEFAULT_SEGMENTATION_PROMPT="""You are a helpful assistant. You specialize in generating segmentation masks as polylines. 
+# DEFAULT_SEGMENTATION_PROMPT="""You are a helpful assistant. You specialize in generating segmentation masks as polylines. 
 
-For each object, provide a list of contours where each contour is a list of interleaved x,y coordinates in pixel space. Report all countours as a JSON array of predictions in the format: {"label": "label", "point_2d": [[x1,y1,x2,y2,...], [x3,y3,x4,y4,...], ...]} where each inner list represents one complete contour. Say nothing else."""
+# For each object, provide a list of contours where each contour is a list of interleaved y,x coordinates in pixel space. Report all contours as a JSON array of predictions in the format: {"label": "label", "point_2d": [[y1,x1,y2,x2,...], [y3,x3,y4,x4,...], ...]} where each inner list represents one complete contour. Note that coordinates are ordered as [y, x], not the typical [x, y]. Say nothing else."""
 
 GEMMA_OPERATIONS = {
     "vqa": {
         "system_prompt": DEFAULT_VQA_SYSTEM_PROMPT,
         "params": {},
     },
-    "segment": {
-        "system_prompt": DEFAULT_SEGMENTATION_PROMPT,
-        "params": {},
-    },
-    "detect": {
-        "system_prompt": DEFAULT_DETECTION_SYSTEM_PROMPT,
-        "params": {},
-    },
-    "point": {
-        "system_prompt": DEFAULT_KEYPOINT_SYSTEM_PROMPT,
-        "params": {},
-    },
+    # model can't do these tasks yet
+    # "segment": {
+    #     "system_prompt": DEFAULT_SEGMENTATION_PROMPT,
+    #     "params": {},
+    # },
+    # "detect": {
+    #     "system_prompt": DEFAULT_DETECTION_SYSTEM_PROMPT,
+    #     "params": {},
+    # },
+    # "point": {
+    #     "system_prompt": DEFAULT_KEYPOINT_SYSTEM_PROMPT,
+    #     "params": {},
+    # },
     "classify": {
         "system_prompt": DEFAULT_CLASSIFICATION_SYSTEM_PROMPT,
         "params": {},
     }
 }
 
-MODEL_SIZE = 1000 # gemma resizes images to 896 x 896
+# MODEL_SIZE = 896 # gemma resizes images to 896 x 896
 
 logger = logging.getLogger(__name__)
 
@@ -188,67 +189,69 @@ class Gemma3(SamplesMixin, Model):
             logger.debug(f"Failed to parse JSON: {s[:200]}")
             return None
 
-    def _to_detections(self, boxes: List[Dict], image_width: int, image_height: int) -> fo.Detections:
-        """Convert bounding boxes to FiftyOne Detections.
+    # def _to_detections(self, boxes: List[Dict], image_width: int, image_height: int) -> fo.Detections:
+    #     """Convert bounding boxes to FiftyOne Detections.
         
-        Takes a list of bounding box dictionaries and converts them to FiftyOne Detection 
-        objects with normalized coordinates. Handles both single boxes and lists of boxes,
-        including boxes nested in dictionaries.
+    #     Takes a list of bounding box dictionaries and converts them to FiftyOne Detection 
+    #     objects with normalized coordinates. Handles both single boxes and lists of boxes,
+    #     including boxes nested in dictionaries.
 
-        Args:
-            boxes: List of dictionaries or single dictionary containing bounding box info.
-                Each box should have:
-                - 'bbox_2d' or 'bbox': List of [x1,y1,x2,y2] coordinates in pixel space
-                - 'label': Optional string label (defaults to "object")
-            image_width: Width of the image in pixels
-            image_height: Height of the image in pixels
+    #     Args:
+    #         boxes: List of dictionaries or single dictionary containing bounding box info.
+    #             Each box should have:
+    #             - 'bbox_2d' or 'bbox': List of [x1,y1,x2,y2] coordinates in pixel space
+    #             - 'label': Optional string label (defaults to "object")
+    #         image_width: Width of the image in pixels
+    #         image_height: Height of the image in pixels
 
-        Returns:
-            fo.Detections object containing the converted bounding box annotations
-            with coordinates normalized to [0,1] x [0,1] range
-        """
-        detections = []
+    #     Returns:
+    #         fo.Detections object containing the converted bounding box annotations
+    #         with coordinates normalized to [0,1] x [0,1] range
+    #     """
+    #     detections = []
         
-        # Calculate scaling factors to transform coordinates
-        scale_x = image_width / MODEL_SIZE
-        scale_y = image_height / MODEL_SIZE
+    #     # Calculate scaling factors
+    #     scale_x = image_width / MODEL_SIZE
+    #     scale_y = image_height / MODEL_SIZE
         
-        # Handle case where boxes is a dictionary
-        if isinstance(boxes, dict):
-            boxes = next((v for v in boxes.values() if isinstance(v, list)), boxes)
+    #     # Handle case where boxes is a dictionary
+    #     if isinstance(boxes, dict):
+    #         boxes = next((v for v in boxes.values() if isinstance(v, list)), boxes)
         
-        boxes = boxes if isinstance(boxes, list) else [boxes]
+    #     boxes = boxes if isinstance(boxes, list) else [boxes]
         
-        for box in boxes:
-            try:
-                bbox = box.get('bbox_2d', box.get('bbox', None))
-                if not bbox:
-                    continue
+    #     for box in boxes:
+    #         try:
+    #             bbox = box.get('bbox_2d', box.get('bbox', None))
+    #             if not bbox:
+    #                 continue
                 
-                # Scale coordinates from model space to original image space
-                x1, y1, x2, y2 = map(float, bbox)
-                x1 = x1 * scale_x
-                y1 = y1 * scale_y
-                x2 = x2 * scale_x
-                y2 = y2 * scale_y
+    #             # Correctly interpret [y_min, x_min, y_max, x_max] format
+    #             y_min, x_min, y_max, x_max = map(float, bbox)
                 
-                # Now normalize to [0,1]
-                x = x1 / image_width
-                y = y1 / image_height
-                w = (x2 - x1) / image_width
-                h = (y2 - y1) / image_height
+    #             # Scale from model space to original image space
+    #             x_min = x_min * scale_x
+    #             x_max = x_max * scale_x
+    #             y_min = y_min * scale_y
+    #             y_max = y_max * scale_y
                 
-                detection = fo.Detection(
-                    label=str(box.get("label", "object")),
-                    bounding_box=[x, y, w, h],
-                )
-                detections.append(detection)
+    #             # Normalize to [0,1] for FiftyOne
+    #             x = x_min / image_width
+    #             y = y_min / image_height
+    #             w = (x_max - x_min) / image_width
+    #             h = (y_max - y_min) / image_height
                 
-            except Exception as e:
-                logger.debug(f"Error processing box {box}: {e}")
-                continue
+    #             detection = fo.Detection(
+    #                 label=str(box.get("label", "object")),
+    #                 bounding_box=[x, y, w, h],
+    #             )
+    #             detections.append(detection)
                 
-        return fo.Detections(detections=detections)
+    #         except Exception as e:
+    #             logger.debug(f"Error processing box {box}: {e}")
+    #             continue
+                
+    #     return fo.Detections(detections=detections)
 
     def _to_keypoints(self, points: List[Dict], image_width: int, image_height: int) -> fo.Keypoints:
         """Convert a list of point dictionaries to FiftyOne Keypoints.
@@ -273,18 +276,18 @@ class Gemma3(SamplesMixin, Model):
         """
         keypoints = []
         
-        # Calculate scaling factors to transform coordinates
+        # Calculate scaling factors
         scale_x = image_width / MODEL_SIZE
         scale_y = image_height / MODEL_SIZE
 
         for point in points:
             try:
-                # Get coordinates from point_2d field and convert to float
-                x, y = point["point_2d"]
+                # Points are returned as [y, x] instead of [x, y]
+                y, x = point["point_2d"]
                 x = float(x.cpu() if torch.is_tensor(x) else x)
                 y = float(y.cpu() if torch.is_tensor(y) else y)
                 
-                # Scale coordinates from model space to original image space
+                # Scale from model space to original image space
                 x = x * scale_x
                 y = y * scale_y
 
@@ -305,63 +308,67 @@ class Gemma3(SamplesMixin, Model):
 
         return fo.Keypoints(keypoints=keypoints)
     
-    def _to_polylines(self, predictions: List[Dict], image_width: int, image_height: int) -> fo.Polylines:
-        """Convert model predictions to FiftyOne Polylines format.
+    # def _to_polylines(self, predictions: List[Dict], image_width: int, image_height: int) -> fo.Polylines:
+    #     """Convert model predictions to FiftyOne Polylines format.
         
-        Args:
-            predictions: List of dictionaries containing polyline information.
-                Each prediction should have:
-                - 'label': String label for the object
-                - 'polylines': List of contours where each contour is a list of 
-                interleaved [x1,y1,x2,y2,...] coordinates in pixel space
-            image_width: Width of the image in pixels
-            image_height: Height of the image in pixels
+    #     Args:
+    #         predictions: List of dictionaries containing polyline information.
+    #             Each prediction should have:
+    #             - 'label': String label for the object
+    #             - 'polylines': List of contours where each contour is a list of 
+    #             interleaved [x1,y1,x2,y2,...] coordinates in pixel space
+    #         image_width: Width of the image in pixels
+    #         image_height: Height of the image in pixels
             
-        Returns:
-            fo.Polylines object containing the converted polyline annotations
-            with coordinates normalized to [0,1] x [0,1] range
-        """
-        polylines = []
-
-        # Calculate scaling factors to transform coordinates
-        scale_x = image_width / MODEL_SIZE
-        scale_y = image_height / MODEL_SIZE
+    #     Returns:
+    #         fo.Polylines object containing the converted polyline annotations
+    #         with coordinates normalized to [0,1] x [0,1] range
+    #     """
+    #     polylines = []
         
-        for pred in predictions:
-            try:              
-                label = str(pred.get("label", "object"))
-                contours = []
+    #     # Calculate scaling factors
+    #     scale_x = image_width / MODEL_SIZE
+    #     scale_y = image_height / MODEL_SIZE
+        
+    #     for pred in predictions:
+    #         try:              
+    #             label = str(pred.get("label", "object"))
+    #             contours = []
                 
-                for contour in pred["point_2d"]:
-                    
-                    # Convert pixel coordinates to normalized [0,1] coordinates
-                    points = []
-                    for i in range(0, len(contour), 2):
-                        if i+1 < len(contour):
-                            # Scale coordinates from model space to original image space
-                            x = float(contour[i]) * scale_x
-                            y = float(contour[i+1]) * scale_y
+    #             for contour in pred["point_2d"]:
+    #                 # Convert to normalized [0,1] coordinates
+    #                 points = []
+    #                 # For polylines, the coordinates are interleaved [y1, x1, y2, x2, ...]
+    #                 for i in range(0, len(contour), 2):
+    #                     if i+1 < len(contour):
+    #                         # Get coordinates in the right order
+    #                         y = float(contour[i])
+    #                         x = float(contour[i+1])
                             
-                            # Then normalize to [0,1]
-                            x = x / image_width
-                            y = y / image_height
-                            points.append([x, y])
+    #                         # Scale from model space to original image space
+    #                         x = x * scale_x
+    #                         y = y * scale_y
                             
-                    contours.append(points)
+    #                         # Normalize to [0,1]
+    #                         x = x / image_width
+    #                         y = y / image_height
+    #                         points.append([x, y])
+                            
+    #                 contours.append(points)
 
-                polyline = fo.Polyline(
-                    label=label,
-                    points=contours,
-                    filled=True,
-                    closed=True,
-                )
-                polylines.append(polyline)
+    #             polyline = fo.Polyline(
+    #                 label=label,
+    #                 points=contours,
+    #                 filled=True,
+    #                 closed=True,
+    #             )
+    #             polylines.append(polyline)
                 
-            except Exception as e:
-                logger.debug(f"Error processing prediction {pred}: {e}")
-                continue
+    #         except Exception as e:
+    #             logger.debug(f"Error processing prediction {pred}: {e}")
+    #             continue
 
-        return fo.Polylines(polylines=polylines)
+    #     return fo.Polylines(polylines=polylines)
 
     def _to_classifications(self, classes: List[Dict]) -> fo.Classifications:
         """Convert a list of classification dictionaries to FiftyOne Classifications.
@@ -443,15 +450,17 @@ class Gemma3(SamplesMixin, Model):
         parsed_output = self._parse_json(output_text)
         if not parsed_output:
             return None
-
-        if self.operation == "detect":
-            return self._to_detections(parsed_output, input_width, input_height)
-        elif self.operation == "point":
-            return self._to_keypoints(parsed_output, input_width, input_height)
-        elif self.operation == "segment":
-            return self._to_polylines(parsed_output, input_width, input_height)
-        elif self.operation == "classify":
+        
+        if self.operation == "classify":
             return self._to_classifications(parsed_output)
+        # if self.operation == "detect":
+        #     return self._to_detections(parsed_output, input_width, input_height)
+        # elif self.operation == "point":
+        #     return self._to_keypoints(parsed_output, input_width, input_height)
+        # elif self.operation == "segment":
+        #     return self._to_polylines(parsed_output, input_width, input_height)
+        # elif self.operation == "classify":
+        #     return self._to_classifications(parsed_output)
 
     def predict(self, image, sample=None):
         """Process an image with the model.
