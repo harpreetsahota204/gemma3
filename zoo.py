@@ -253,60 +253,60 @@ class Gemma3(SamplesMixin, Model):
                 
     #     return fo.Detections(detections=detections)
 
-    def _to_keypoints(self, points: List[Dict], image_width: int, image_height: int) -> fo.Keypoints:
-        """Convert a list of point dictionaries to FiftyOne Keypoints.
+    # def _to_keypoints(self, points: List[Dict], image_width: int, image_height: int) -> fo.Keypoints:
+    #     """Convert a list of point dictionaries to FiftyOne Keypoints.
         
-        Args:
-            points: List of dictionaries containing point information.
-                Each point should have:
-                - 'point_2d': List of [x,y] coordinates in pixel space
-                - 'label': String label describing the point
-            image_width: Width of the image in pixels
-            image_height: Height of the image in pixels
+    #     Args:
+    #         points: List of dictionaries containing point information.
+    #             Each point should have:
+    #             - 'point_2d': List of [x,y] coordinates in pixel space
+    #             - 'label': String label describing the point
+    #         image_width: Width of the image in pixels
+    #         image_height: Height of the image in pixels
                 
-        Returns:
-            fo.Keypoints object containing the converted keypoint annotations
-            with coordinates normalized to [0,1] x [0,1] range
+    #     Returns:
+    #         fo.Keypoints object containing the converted keypoint annotations
+    #         with coordinates normalized to [0,1] x [0,1] range
         
-        Expected input format:
-        [
-            {"point_2d": [100, 200], "label": "person's head", "confidence": 0.9},
-            {"point_2d": [300, 400], "label": "dog's nose"}
-        ]
-        """
-        keypoints = []
+    #     Expected input format:
+    #     [
+    #         {"point_2d": [100, 200], "label": "person's head", "confidence": 0.9},
+    #         {"point_2d": [300, 400], "label": "dog's nose"}
+    #     ]
+    #     """
+    #     keypoints = []
         
-        # Calculate scaling factors
-        scale_x = image_width / MODEL_SIZE
-        scale_y = image_height / MODEL_SIZE
+    #     # Calculate scaling factors
+    #     scale_x = image_width / MODEL_SIZE
+    #     scale_y = image_height / MODEL_SIZE
 
-        for point in points:
-            try:
-                # Points are returned as [y, x] instead of [x, y]
-                y, x = point["point_2d"]
-                x = float(x.cpu() if torch.is_tensor(x) else x)
-                y = float(y.cpu() if torch.is_tensor(y) else y)
+    #     for point in points:
+    #         try:
+    #             # Points are returned as [y, x] instead of [x, y]
+    #             y, x = point["point_2d"]
+    #             x = float(x.cpu() if torch.is_tensor(x) else x)
+    #             y = float(y.cpu() if torch.is_tensor(y) else y)
                 
-                # Scale from model space to original image space
-                x = x * scale_x
-                y = y * scale_y
+    #             # Scale from model space to original image space
+    #             x = x * scale_x
+    #             y = y * scale_y
 
-                normalized_point = [
-                    x / image_width,
-                    y / image_height
-                ]
+    #             normalized_point = [
+    #                 x / image_width,
+    #                 y / image_height
+    #             ]
 
-                keypoint = fo.Keypoint(
-                    label=str(point.get("label", "point")),
-                    points=[normalized_point],
-                )
-                keypoints.append(keypoint)
+    #             keypoint = fo.Keypoint(
+    #                 label=str(point.get("label", "point")),
+    #                 points=[normalized_point],
+    #             )
+    #             keypoints.append(keypoint)
 
-            except Exception as e:
-                logger.debug(f"Error processing point {point}: {e}")
-                continue
+    #         except Exception as e:
+    #             logger.debug(f"Error processing point {point}: {e}")
+    #             continue
 
-        return fo.Keypoints(keypoints=keypoints)
+    #     return fo.Keypoints(keypoints=keypoints)
     
     # def _to_polylines(self, predictions: List[Dict], image_width: int, image_height: int) -> fo.Polylines:
     #     """Convert model predictions to FiftyOne Polylines format.
